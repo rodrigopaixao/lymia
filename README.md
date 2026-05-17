@@ -63,17 +63,38 @@ O fluxo principal já está em `nodered-data/flows.json`.
 
 No primeiro acesso, abra o node de configuracao do Telegram no Node-RED e confirme o token do bot. Alguns nodes de Telegram guardam esse token como credencial interna do Node-RED, mesmo quando a variavel `TELEGRAM_BOT_TOKEN` existe no Docker.
 
-## Watson Assistant
+## Watson Assistant V2
 
-Configure o Assistant para responder `Em que posso ajudar` no primeiro turno. O fluxo chama a API stateless:
+O fluxo usa o node visual `assistant V2` do pacote `node-red-node-watson`.
 
-```text
-POST /v2/assistants/{assistant_id}/message?version=2024-08-25
-```
+No Node-RED, abra o node **IBM Watson Assistant V2** e configure:
 
-Enquanto as variáveis `WATSON_API_KEY`, `WATSON_ASSISTANT_ID` e `WATSON_SERVICE_URL` não estiverem configuradas, o fluxo usa uma resposta local de bootstrap para permitir testar Telegram e SQLite.
+- `API Key`
+- `Service Endpoint`
+- `Assistant ID`
 
-O projeto tambem instala o pacote `node-red-node-watson`, que disponibiliza o node visual `watson-assistant-v2` na paleta do Node-RED. A primeira versao do fluxo usa HTTP direto para manter as credenciais via `.env`; se preferirmos, podemos substituir esse trecho pelo node visual do Watson Assistant v2.
+As interacoes principais devem ser definidas no IBM Cloud Watson Assistant. O Node-RED apenas recebe a acao escolhida pelo Assistant e executa a integracao com SQLite quando necessario.
+
+Contrato esperado no contexto `user_defined` do Watson:
+
+| Variavel | Exemplo | Uso |
+| --- | --- | --- |
+| `acao_consulta` | `identificar_aluno` | Acao que o Node-RED deve executar |
+| `cpf` | `52998224725` | Identificador do aluno |
+| `rm` | `RM1001` | Identificador alternativo do aluno |
+
+Acoes suportadas:
+
+- `identificar_aluno`
+- `perfil`
+- `rm`
+- `curso`
+- `notas`
+- `materias`
+- `faltas`
+- `turnos`
+
+Exemplo: no primeiro fluxo do Watson, peca o CPF ao aluno. Quando o CPF estiver preenchido, retorne `acao_consulta = identificar_aluno` e `cpf = <cpf informado>`. Depois que o aluno estiver identificado, o Node-RED envia de volta ao Watson, em `additional_context`, dados como `aluno_identificado`, `aluno_id`, `aluno_nome`, `aluno_cpf`, `aluno_rm` e `aluno_curso`.
 
 ## Schema SQLite
 

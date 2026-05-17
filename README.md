@@ -97,7 +97,11 @@ Acoes suportadas:
 
 Exemplo: no primeiro fluxo do Watson, peca o CPF ao aluno. Quando o CPF estiver preenchido, retorne `acao_consulta = identificar_aluno` e `cpf = <cpf informado>`. Depois que o aluno estiver identificado, o Node-RED envia de volta ao Watson, em `additional_context`, dados como `aluno_identificado`, `aluno_id`, `aluno_nome`, `aluno_cpf`, `aluno_rm` e `aluno_curso`.
 
+Depois que o aluno estiver identificado, o Node-RED mantem esse aluno em contexto por conversa do Telegram. Portanto, consultas seguintes como "minhas notas" ou "minhas faltas" nao precisam enviar CPF/RM novamente; o fluxo usa `aluno_id` salvo.
+
 Para fluxos em duas etapas, como "quero consultar meu RM" seguido de CPF, configure o Watson para retornar `acao_pendente = rm` enquanto pede o CPF. Quando o CPF chegar, o Node-RED usa essa acao pendente para executar a consulta mesmo que o Assistant responda uma mensagem generica.
+
+Quando nem o Watson nem o texto do aluno indicam uma acao reconhecida, o bot responde de forma conversacional com uma lista curta de opcoes disponiveis.
 
 ## Schema SQLite
 

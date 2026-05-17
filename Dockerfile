@@ -7,7 +7,8 @@ USER node-red
 COPY db/init.sql /opt/lyvia/init.sql
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 USER root
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+  && chmod +x /docker-entrypoint.sh
 USER node-red
 
 RUN npm install --unsafe-perm --no-update-notifier --no-fund --omit=dev --omit=optional \
@@ -15,4 +16,4 @@ RUN npm install --unsafe-perm --no-update-notifier --no-fund --omit=dev --omit=o
   node-red-node-sqlite@^1.1.0 \
   node-red-node-watson
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]

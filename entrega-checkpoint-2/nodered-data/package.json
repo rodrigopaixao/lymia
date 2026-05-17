@@ -1,0 +1,11 @@
+{
+  "name": "lyvia-nodered",
+  "description": "Node-RED orchestration for Telegram, IBM Watson Assistant and SQLite CPF lookup.",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "node-red-contrib-telegrambot": "^16.3.2",
+    "node-red-node-sqlite": "^1.1.0",
+    "node-red-node-watson": "^0.10.6"
+  }
+}

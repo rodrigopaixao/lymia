@@ -41,7 +41,21 @@ WATSON_ASSISTANT_ID=...
 WATSON_SERVICE_URL=...
 ```
 
-3. Crie o banco SQLite local:
+3. Crie o banco SQLite local (o arquivo `nodered-data/escola.db` nao vem no Git):
+
+**Linux/macOS:**
+
+```bash
+./scripts/init-db.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+.\scripts\init-db.ps1
+```
+
+Alternativa manual com `sqlite3`:
 
 ```bash
 sqlite3 nodered-data/escola.db < db/init.sql
@@ -52,6 +66,21 @@ sqlite3 nodered-data/escola.db < db/init.sql
 ```bash
 docker compose up --build
 ```
+
+O `docker compose` cria o banco automaticamente se ele ainda nao existir (servico `db-init` + entrypoint do container).
+
+## Rodando no Windows
+
+Problemas comuns e como resolver:
+
+| Sintoma | Causa provavel | Solucao |
+| --- | --- | --- |
+| Node-RED nao encontra o banco | `escola.db` nao foi criado apos o clone | Rode `.\scripts\init-db.ps1` ou `docker compose up --build` |
+| Erro ao usar `sqlite3` no CMD/PowerShell | O CLI do SQLite nao vem instalado no Windows | Use o script `init-db.ps1` (ele usa Docker se necessario) |
+| Banco existe mas consultas falham no Docker | Pasta do projeto fora do compartilhamento do Docker Desktop | Em Docker Desktop: **Settings > Resources > File sharing** e inclua a unidade/pasta do projeto |
+| Node-RED instalado localmente (sem Docker) | O fluxo aponta para `/data/escola.db` (caminho Linux do container) | No editor, abra o node **sqlite-db-config** e troque para o caminho absoluto do Windows, por exemplo `C:\Users\voce\Lyvia\nodered-data\escola.db` |
+
+No Docker, o caminho `/data/escola.db` dentro do Node-RED corresponde a `nodered-data\escola.db` na pasta do projeto (volume `./nodered-data:/data`).
 
 5. Abra o editor:
 

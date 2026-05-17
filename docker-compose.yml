@@ -1,0 +1,18 @@
+services:
+  nodered:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lyvia-nodered:latest
+    container_name: lyvia-nodered
+    ports:
+      - "1880:1880"
+    environment:
+      TZ: America/Toronto
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      WATSON_API_KEY: ${WATSON_API_KEY:-}
+      WATSON_ASSISTANT_ID: ${WATSON_ASSISTANT_ID:-}
+      WATSON_SERVICE_URL: ${WATSON_SERVICE_URL:-}
+      WATSON_VERSION: ${WATSON_VERSION:-2024-08-25}
+    volumes:
+      - ./nodered-data:/data

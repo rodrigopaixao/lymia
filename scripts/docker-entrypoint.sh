@@ -9,4 +9,4 @@ if [ ! -f "$DB" ]; then
   echo "[lyvia] Banco criado com sucesso."
 fi
 
-exec npm start --cache /data/.npm --userDir /data "$@"
+exec npm start --cache /data/.npm -- --userDir /data "$@"

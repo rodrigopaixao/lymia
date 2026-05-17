@@ -1,9 +1,7 @@
 FROM nodered/node-red:latest
 
 USER root
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends sqlite3 \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache sqlite
 USER node-red
 
 COPY db/init.sql /opt/lyvia/init.sql

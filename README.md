@@ -80,6 +80,7 @@ Contrato esperado no contexto `user_defined` do Watson:
 | Variavel | Exemplo | Uso |
 | --- | --- | --- |
 | `acao_consulta` | `identificar_aluno` | Acao que o Node-RED deve executar |
+| `acao_pendente` | `rm` | Acao aguardando CPF/RM quando o Watson pede identificacao |
 | `cpf` | `52998224725` | Identificador do aluno |
 | `rm` | `RM1001` | Identificador alternativo do aluno |
 
@@ -95,6 +96,8 @@ Acoes suportadas:
 - `turnos`
 
 Exemplo: no primeiro fluxo do Watson, peca o CPF ao aluno. Quando o CPF estiver preenchido, retorne `acao_consulta = identificar_aluno` e `cpf = <cpf informado>`. Depois que o aluno estiver identificado, o Node-RED envia de volta ao Watson, em `additional_context`, dados como `aluno_identificado`, `aluno_id`, `aluno_nome`, `aluno_cpf`, `aluno_rm` e `aluno_curso`.
+
+Para fluxos em duas etapas, como "quero consultar meu RM" seguido de CPF, configure o Watson para retornar `acao_pendente = rm` enquanto pede o CPF. Quando o CPF chegar, o Node-RED usa essa acao pendente para executar a consulta mesmo que o Assistant responda uma mensagem generica.
 
 ## Schema SQLite
 

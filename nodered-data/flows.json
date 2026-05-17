@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "Lyvia Chatbot",
         "disabled": false,
-        "info": "Telegram -> Node-RED -> IBM Watson Assistant -> SQLite student CPF lookup"
+        "info": "Telegram -> Node-RED -> IBM Watson Assistant -> SQLite academic assistant"
     },
     {
         "id": "telegram-bot-config",
@@ -43,7 +43,7 @@
         "id": "comment-overview",
         "type": "comment",
         "z": "tab-lyvia-chatbot",
-        "name": "Fluxo principal: Telegram recebe mensagem, Watson responde, usuario informa CPF e SQLite consulta aluno.",
+        "name": "Fluxo principal: identifica aluno por CPF, informa RM e depois consulta curso, notas, materias, faltas e turnos por CPF/RM.",
         "info": "",
         "x": 470,
         "y": 40,
@@ -71,9 +71,9 @@
         "id": "route-conversation",
         "type": "function",
         "z": "tab-lyvia-chatbot",
-        "name": "Roteador conversa / CPF",
-        "func": "const payload = msg.payload || {};\nconst chatId = payload.chatId || payload.chatid || payload.message?.chat?.id;\nconst text = String(payload.content || payload.text || payload.message?.text || '').trim();\n\nif (!chatId) {\n    node.warn('Mensagem sem chatId recebida do Telegram.');\n    return [null, null];\n}\n\nconst stateKey = `awaitingCpf:${chatId}`;\n\nfunction reply(content) {\n    return {\n        payload: {\n            chatId,\n            type: 'message',\n            content\n        }\n    };\n}\n\nfunction onlyDigits(value) {\n    return String(value || '').replace(/\\D/g, '');\n}\n\nfunction isValidCpf(cpf) {\n    cpf = onlyDigits(cpf);\n    if (cpf.length !== 11 || /^(\\d)\\1{10}$/.test(cpf)) return false;\n\n    let sum = 0;\n    for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i);\n    let check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    if (check !== Number(cpf[9])) return false;\n\n    sum = 0;\n    for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i);\n    check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    return check === Number(cpf[10]);\n}\n\nfunction buildWatsonMessage() {\n    const apiKey = env.get('WATSON_API_KEY');\n    const assistantId = env.get('WATSON_ASSISTANT_ID');\n    const serviceUrl = String(env.get('WATSON_SERVICE_URL') || '').replace(/\\/$/, '');\n    const version = env.get('WATSON_VERSION') || '2024-08-25';\n\n    msg.chatId = chatId;\n    msg.userText = text || '/start';\n    msg.watsonConfigured = Boolean(apiKey && assistantId && serviceUrl);\n    msg.fallbackReply = 'Em que posso ajudar';\n\n    if (msg.watsonConfigured) {\n        msg.method = 'POST';\n        msg.url = `${serviceUrl}/v2/assistants/${assistantId}/message?version=${version}`;\n        msg.headers = {\n            'Content-Type': 'application/json',\n            'Accept': 'application/json',\n            'Authorization': `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`\n        };\n        msg.payload = {\n            input: {\n                message_type: 'text',\n                text: msg.userText\n            },\n            context: {\n                global: {\n                    system: {\n                        user_id: String(chatId)\n                    }\n                }\n            }\n        };\n    }\n\n    return msg;\n}\n\nif (!text || text === '/start') {\n    flow.set(stateKey, true);\n    return [null, buildWatsonMessage()];\n}\n\nif (flow.get(stateKey)) {\n    const cpf = onlyDigits(text);\n\n    if (cpf.length !== 11) {\n        return [null, reply('CPF invalido. Envie 11 digitos, com ou sem pontuacao.')];\n    }\n\n    if (!isValidCpf(cpf)) {\n        return [null, reply('CPF invalido. Confira os digitos e tente novamente.')];\n    }\n\n    msg.chatId = chatId;\n    msg.cpf = cpf;\n    msg.topic = `SELECT a.id AS aluno_id, a.cpf, a.nome AS aluno_nome, a.rm, c.nome AS curso_nome, m.nome AS materia_nome, m.turno, m.total_horas, n.cp_1, n.cp_2, n.gs_1, n.ch_1, n.media_final FROM aluno a JOIN curso c ON c.id = a.curso_id LEFT JOIN notas n ON n.aluno_id = a.id LEFT JOIN materia m ON m.id = n.materia_id WHERE a.cpf = '${cpf}' ORDER BY m.nome`;\n    flow.set(stateKey, false);\n    return [msg, null];\n}\n\nflow.set(stateKey, true);\nreturn [null, buildWatsonMessage()];",
-        "outputs": 2,
+        "name": "Roteador conversa academica",
+        "func": "const payload = msg.payload || {};\nconst chatId = payload.chatId || payload.chatid || payload.message?.chat?.id;\nconst text = String(payload.content || payload.text || payload.message?.text || '').trim();\n\nif (!chatId) {\n    node.warn('Mensagem sem chatId recebida do Telegram.');\n    return [null, null, null];\n}\n\nconst sessionKey = `studentSession:${chatId}`;\nconst session = flow.get(sessionKey) || { status: 'needCpf' };\n\nfunction direct(content) {\n    return {\n        payload: {\n            chatId,\n            type: 'message',\n            content\n        }\n    };\n}\n\nfunction onlyDigits(value) {\n    return String(value || '').replace(/\\D/g, '');\n}\n\nfunction normalize(value) {\n    return String(value || '')\n        .normalize('NFD')\n        .replace(/[\\u0300-\\u036f]/g, '')\n        .toLowerCase();\n}\n\nfunction isValidCpf(cpf) {\n    cpf = onlyDigits(cpf);\n    if (cpf.length !== 11 || /^(\\d)\\1{10}$/.test(cpf)) return false;\n\n    let sum = 0;\n    for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i);\n    let check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    if (check !== Number(cpf[9])) return false;\n\n    sum = 0;\n    for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i);\n    check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    return check === Number(cpf[10]);\n}\n\nfunction extractCpf(value) {\n    const digits = onlyDigits(value);\n    return digits.length === 11 ? digits : null;\n}\n\nfunction extractRm(value) {\n    const match = String(value || '').match(/\\bRM\\s*[-:]?\\s*([A-Za-z0-9]+)\\b/i);\n    if (!match) return null;\n    return `RM${match[1]}`.toUpperCase();\n}\n\nfunction sqlQuote(value) {\n    return String(value).replace(/'/g, \"''\");\n}\n\nfunction studentWhere(identifier) {\n    if (identifier?.cpf) return `a.cpf = '${sqlQuote(identifier.cpf)}'`;\n    if (identifier?.rm) return `upper(a.rm) = '${sqlQuote(identifier.rm.toUpperCase())}'`;\n    if (identifier?.alunoId) return `a.id = ${Number(identifier.alunoId)}`;\n    return null;\n}\n\nfunction baseStudentSelect(where) {\n    return `SELECT a.id AS aluno_id, a.cpf, a.nome AS aluno_nome, a.rm, c.nome AS curso_nome FROM aluno a JOIN curso c ON c.id = a.curso_id WHERE ${where} LIMIT 1`;\n}\n\nfunction buildWatsonMessage() {\n    const apiKey = env.get('WATSON_API_KEY');\n    const assistantId = env.get('WATSON_ASSISTANT_ID');\n    const serviceUrl = String(env.get('WATSON_SERVICE_URL') || '').replace(/\\/$/, '');\n    const version = env.get('WATSON_VERSION') || '2024-08-25';\n\n    msg.chatId = chatId;\n    msg.userText = text || '/start';\n    msg.watsonConfigured = Boolean(apiKey && assistantId && serviceUrl);\n    msg.fallbackReply = 'Em que posso ajudar';\n\n    if (msg.watsonConfigured) {\n        msg.method = 'POST';\n        msg.url = `${serviceUrl}/v2/assistants/${assistantId}/message?version=${version}`;\n        msg.headers = {\n            'Content-Type': 'application/json',\n            'Accept': 'application/json',\n            'Authorization': `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`\n        };\n        msg.payload = {\n            input: {\n                message_type: 'text',\n                text: msg.userText\n            },\n            context: {\n                global: {\n                    system: {\n                        user_id: String(chatId)\n                    }\n                }\n            }\n        };\n    }\n\n    return msg;\n}\n\nfunction menu(nome, rm) {\n    const prefix = nome && rm ? `Aluno identificado: ${nome}\\nRM: ${rm}\\n\\n` : '';\n    return `${prefix}Agora voce pode consultar: curso, notas, materias inscritas, faltas e turnos.\\n\\nExemplos:\\n- notas\\n- curso\\n- materias inscritas\\n- faltas\\n- turno\\n\\nTambem aceito outro CPF ou RM na pergunta, como: notas RM1002.`;\n}\n\nfunction buildQuery(queryType, identifier) {\n    const where = studentWhere(identifier);\n    if (!where) return null;\n\n    const studentColumns = 'a.id AS aluno_id, a.cpf, a.nome AS aluno_nome, a.rm, c.nome AS curso_nome';\n\n    if (queryType === 'identify' || queryType === 'profile' || queryType === 'curso' || queryType === 'rm') {\n        return baseStudentSelect(where);\n    }\n\n    if (queryType === 'notas') {\n        return `SELECT ${studentColumns}, m.nome AS materia_nome, m.turno, m.total_horas, n.cp_1, n.cp_2, n.gs_1, n.ch_1, n.media_final FROM aluno a JOIN curso c ON c.id = a.curso_id LEFT JOIN notas n ON n.aluno_id = a.id LEFT JOIN materia m ON m.id = n.materia_id WHERE ${where} ORDER BY m.nome`;\n    }\n\n    if (queryType === 'materias') {\n        return `SELECT DISTINCT ${studentColumns}, m.nome AS materia_nome, m.turno, m.total_horas FROM aluno a JOIN curso c ON c.id = a.curso_id JOIN aluno_materia am ON am.aluno_id = a.id JOIN materia m ON m.id = am.materia_id WHERE ${where} ORDER BY m.nome`;\n    }\n\n    if (queryType === 'turnos') {\n        return `SELECT DISTINCT ${studentColumns}, m.nome AS materia_nome, m.turno FROM aluno a JOIN curso c ON c.id = a.curso_id JOIN aluno_materia am ON am.aluno_id = a.id JOIN materia m ON m.id = am.materia_id WHERE ${where} ORDER BY m.turno, m.nome`;\n    }\n\n    if (queryType === 'faltas') {\n        return `SELECT ${studentColumns}, m.nome AS materia_nome, m.turno, m.total_horas, COUNT(am.data_presenca) AS presencas_registradas, max(m.total_horas - COUNT(am.data_presenca), 0) AS faltas_calculadas FROM aluno a JOIN curso c ON c.id = a.curso_id JOIN materia m ON m.curso_id = a.curso_id LEFT JOIN aluno_materia am ON am.aluno_id = a.id AND am.materia_id = m.id WHERE ${where} GROUP BY a.id, m.id ORDER BY m.nome`;\n    }\n\n    return null;\n}\n\nfunction routeSql(queryType, identifier) {\n    const topic = buildQuery(queryType, identifier);\n    if (!topic) return null;\n    msg.chatId = chatId;\n    msg.queryType = queryType;\n    msg.identifier = identifier;\n    msg.topic = topic;\n    return msg;\n}\n\nconst normalized = normalize(text);\n\nif (!text || normalized === '/start' || normalized === 'start' || normalized === 'iniciar') {\n    flow.set(sessionKey, { status: 'needCpf' });\n    return [null, null, direct('Ola. Para eu saber com quem estou falando, informe seu CPF.')];\n}\n\nif (['sair', 'reset', 'reiniciar', 'trocar aluno', 'trocar'].includes(normalized)) {\n    flow.set(sessionKey, { status: 'needCpf' });\n    return [null, null, direct('Tudo bem. Informe o CPF do aluno para iniciar novamente.')];\n}\n\nconst cpf = extractCpf(text);\nconst rm = extractRm(text);\n\nif (session.status !== 'identified') {\n    if (!cpf) {\n        return [null, null, direct('Para iniciar, informe o CPF do aluno com 11 digitos.')];\n    }\n\n    if (!isValidCpf(cpf)) {\n        return [null, null, direct('CPF invalido. Confira os digitos e tente novamente.')];\n    }\n\n    return [routeSql('identify', { cpf }), null, null];\n}\n\nif (['ajuda', 'help', 'menu', 'opcoes', 'opções'].includes(normalized)) {\n    return [null, null, direct(menu(session.nome, session.rm))];\n}\n\nconst identifier = cpf ? { cpf } : rm ? { rm } : { alunoId: session.alunoId };\n\nif (cpf && !isValidCpf(cpf)) {\n    return [null, null, direct('CPF invalido. Confira os digitos e tente novamente.')];\n}\n\nlet queryType = null;\nif (/\\b(rm|registro de matricula|matricula)\\b/.test(normalized) && !/materia|disciplina/.test(normalized)) queryType = 'rm';\nif (/\\b(curso|graduacao|graduação)\\b/.test(normalized)) queryType = 'curso';\nif (/\\b(nota|notas|media|média|cp|gs|ch)\\b/.test(normalized)) queryType = 'notas';\nif (/\\b(materia|materias|matéria|matérias|disciplina|disciplinas|inscrita|inscritas|matriculada|matriculadas)\\b/.test(normalized)) queryType = 'materias';\nif (/\\b(falta|faltas|ausencia|ausências|presenca|presenças|presença|presenças)\\b/.test(normalized)) queryType = 'faltas';\nif (/\\b(turno|turnos|horario|horário|periodo|período)\\b/.test(normalized)) queryType = 'turnos';\n\nif (!queryType && (cpf || rm)) queryType = 'profile';\n\nif (!queryType) {\n    return [null, null, direct(menu(session.nome, session.rm))];\n}\n\nconst sqlMsg = routeSql(queryType, identifier);\nif (!sqlMsg) {\n    return [null, buildWatsonMessage(), null];\n}\n\nreturn [sqlMsg, null, null];",
+        "outputs": 3,
         "timeout": 0,
         "noerr": 0,
         "initialize": "",
@@ -89,6 +89,11 @@
             [
                 "switch-watson-config",
                 "debug-route-watson"
+            ],
+            [
+                "telegram-out",
+                "debug-direct-response",
+                "debug-telegram-out"
             ]
         ]
     },
@@ -113,8 +118,8 @@
         "id": "format-sqlite-response",
         "type": "function",
         "z": "tab-lyvia-chatbot",
-        "name": "Formatar resposta SQLite",
-        "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst cpf = String(msg.cpf || '').replace(/\\D/g, '');\nconst maskedCpf = cpf.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');\n\nlet content;\nif (rows.length === 0) {\n    content = `Nao encontrei aluno para o CPF ${maskedCpf}.`;\n} else {\n    const aluno = rows[0];\n    const lines = [\n        `Aluno encontrado para ${maskedCpf}:`,\n        `Nome: ${aluno.aluno_nome}`,\n        `RM: ${aluno.rm}`,\n        `Curso: ${aluno.curso_nome}`\n    ];\n\n    const materias = rows.filter(row => row.materia_nome);\n    if (materias.length > 0) {\n        lines.push('', 'Notas:');\n        for (const materia of materias) {\n            lines.push(`- ${materia.materia_nome} (${materia.turno}, ${materia.total_horas}h): media ${materia.media_final}`);\n        }\n    }\n\n    content = lines.join('\\n');\n}\n\nmsg.payload = {\n    chatId: msg.chatId,\n    type: 'message',\n    content\n};\nreturn msg;",
+        "name": "Formatar resposta academica",
+        "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst queryType = msg.queryType || 'profile';\nconst sessionKey = `studentSession:${msg.chatId}`;\n\nfunction maskCpf(value) {\n    const cpf = String(value || '').replace(/\\D/g, '');\n    return cpf.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');\n}\n\nfunction reply(content) {\n    msg.payload = {\n        chatId: msg.chatId,\n        type: 'message',\n        content\n    };\n    return msg;\n}\n\nfunction studentNotFound() {\n    const id = msg.identifier?.cpf ? maskCpf(msg.identifier.cpf) : msg.identifier?.rm || 'informado';\n    return reply(`Nao encontrei aluno para ${id}. Confira o CPF/RM e tente novamente.`);\n}\n\nfunction sessionFrom(row) {\n    return {\n        status: 'identified',\n        alunoId: row.aluno_id,\n        cpf: row.cpf,\n        rm: row.rm,\n        nome: row.aluno_nome,\n        curso: row.curso_nome\n    };\n}\n\nfunction header(row) {\n    return [\n        `Aluno: ${row.aluno_nome}`,\n        `CPF: ${maskCpf(row.cpf)}`,\n        `RM: ${row.rm}`,\n        `Curso: ${row.curso_nome}`\n    ];\n}\n\nif (rows.length === 0) {\n    return studentNotFound();\n}\n\nconst aluno = rows[0];\n\nif (queryType === 'identify') {\n    flow.set(sessionKey, sessionFrom(aluno));\n    return reply([\n        `Aluno identificado: ${aluno.aluno_nome}`,\n        `RM: ${aluno.rm}`,\n        '',\n        'Agora voce pode consultar: curso, notas, materias inscritas, faltas e turnos.',\n        'Voce tambem pode informar outro CPF ou RM na pergunta.'\n    ].join('\\n'));\n}\n\nif (queryType === 'profile') {\n    return reply(header(aluno).join('\\n'));\n}\n\nif (queryType === 'rm') {\n    return reply([`RM de ${aluno.aluno_nome}: ${aluno.rm}`, `CPF: ${maskCpf(aluno.cpf)}`].join('\\n'));\n}\n\nif (queryType === 'curso') {\n    return reply([`Curso de ${aluno.aluno_nome}:`, aluno.curso_nome, `RM: ${aluno.rm}`].join('\\n'));\n}\n\nif (queryType === 'notas') {\n    const materias = rows.filter(row => row.materia_nome);\n    if (materias.length === 0) {\n        return reply(`${aluno.aluno_nome} ainda nao possui notas cadastradas.`);\n    }\n\n    const lines = header(aluno).concat('', 'Notas:');\n    for (const materia of materias) {\n        lines.push(`- ${materia.materia_nome}: CP1 ${materia.cp_1}, CP2 ${materia.cp_2}, GS1 ${materia.gs_1}, CH1 ${materia.ch_1}, media ${materia.media_final}`);\n    }\n    return reply(lines.join('\\n'));\n}\n\nif (queryType === 'materias') {\n    const materias = rows.filter(row => row.materia_nome);\n    if (materias.length === 0) {\n        return reply(`${aluno.aluno_nome} nao possui materias inscritas cadastradas.`);\n    }\n\n    const lines = header(aluno).concat('', 'Materias inscritas:');\n    for (const materia of materias) {\n        lines.push(`- ${materia.materia_nome} (${materia.turno}, ${materia.total_horas}h)`);\n    }\n    return reply(lines.join('\\n'));\n}\n\nif (queryType === 'turnos') {\n    const materias = rows.filter(row => row.materia_nome);\n    if (materias.length === 0) {\n        return reply(`${aluno.aluno_nome} nao possui turnos cadastrados.`);\n    }\n\n    const lines = header(aluno).concat('', 'Turnos:');\n    for (const materia of materias) {\n        lines.push(`- ${materia.materia_nome}: ${materia.turno}`);\n    }\n    return reply(lines.join('\\n'));\n}\n\nif (queryType === 'faltas') {\n    const materias = rows.filter(row => row.materia_nome);\n    if (materias.length === 0) {\n        return reply(`${aluno.aluno_nome} nao possui frequencia cadastrada.`);\n    }\n\n    const lines = header(aluno).concat('', 'Faltas:');\n    for (const materia of materias) {\n        lines.push(`- ${materia.materia_nome}: ${materia.faltas_calculadas} faltas calculadas, ${materia.presencas_registradas} presencas registradas`);\n    }\n    lines.push('', 'Obs.: no schema atual, faltas sao calculadas a partir da carga horaria menos presencas registradas.');\n    return reply(lines.join('\\n'));\n}\n\nreturn reply(header(aluno).join('\\n'));",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -265,7 +270,7 @@
         "id": "debug-route-sqlite",
         "type": "debug",
         "z": "tab-lyvia-chatbot",
-        "name": "DEBUG rota CPF -> SQLite",
+        "name": "DEBUG rota consulta academica",
         "active": true,
         "tosidebar": true,
         "console": false,
@@ -316,7 +321,7 @@
         "id": "debug-sqlite-formatted",
         "type": "debug",
         "z": "tab-lyvia-chatbot",
-        "name": "DEBUG resposta SQLite formatada",
+        "name": "DEBUG resposta academica formatada",
         "active": true,
         "tosidebar": true,
         "console": false,
@@ -338,7 +343,7 @@
         "tosidebar": true,
         "console": false,
         "tostatus": false,
-        "complete": "true",
+        "complete": "payload",
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
@@ -412,6 +417,23 @@
         "statusType": "auto",
         "x": 1580,
         "y": 300,
+        "wires": []
+    },
+    {
+        "id": "debug-direct-response",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG resposta direta",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 850,
+        "y": 420,
         "wires": []
     }
 ]

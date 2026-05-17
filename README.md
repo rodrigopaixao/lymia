@@ -10,7 +10,7 @@ flowchart LR
   T --> NR[Node-RED]
   NR --> W[IBM Watson Assistant]
   W --> NR
-  NR --> DB[(SQLite clientes.db)]
+  NR --> DB[(SQLite escola.db)]
   NR --> T
   T --> U
 ```
@@ -44,7 +44,7 @@ WATSON_SERVICE_URL=...
 3. Crie o banco SQLite local:
 
 ```bash
-sqlite3 nodered-data/clientes.db < db/init.sql
+sqlite3 nodered-data/escola.db < db/init.sql
 ```
 
 4. Suba o Node-RED:
@@ -75,13 +75,25 @@ Enquanto as variáveis `WATSON_API_KEY`, `WATSON_ASSISTANT_ID` e `WATSON_SERVICE
 
 O projeto tambem instala o pacote `node-red-node-watson`, que disponibiliza o node visual `watson-assistant-v2` na paleta do Node-RED. A primeira versao do fluxo usa HTTP direto para manter as credenciais via `.env`; se preferirmos, podemos substituir esse trecho pelo node visual do Watson Assistant v2.
 
+## Schema SQLite
+
+O schema em `db/init.sql` segue o modelo da imagem:
+
+- `curso`: cadastro dos cursos.
+- `aluno`: cadastro dos alunos, com `cpf` e `rm` unicos.
+- `materia`: materias vinculadas ao curso.
+- `aluno_materia`: presencas por aluno, materia e data, com chave primaria composta.
+- `notas`: notas por aluno e materia, com chave primaria composta por `aluno_id` e `materia_id`.
+
+O banco tambem possui FKs, constraints, indices e timestamps de criacao/atualizacao.
+
 ## CPFs de teste
 
-| CPF | Nome | Status | Plano |
+| CPF | Nome | RM | Curso |
 | --- | --- | --- | --- |
-| 529.982.247-25 | Maria Oliveira | ativo | Premium |
-| 111.444.777-35 | Joao da Silva | pendente | Essencial |
-| 123.456.789-09 | Ana Souza | bloqueado | Basico |
+| 529.982.247-25 | Maria Oliveira | RM1001 | Analise e Desenvolvimento de Sistemas |
+| 111.444.777-35 | Joao da Silva | RM1002 | Analise e Desenvolvimento de Sistemas |
+| 123.456.789-09 | Ana Souza | RM2001 | Administracao |
 
 ## Proximos passos sugeridos
 

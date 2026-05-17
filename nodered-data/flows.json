@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "Lyvia Chatbot",
         "disabled": false,
-        "info": "Telegram -> Node-RED -> IBM Watson Assistant -> SQLite CPF lookup"
+        "info": "Telegram -> Node-RED -> IBM Watson Assistant -> SQLite student CPF lookup"
     },
     {
         "id": "telegram-bot-config",
@@ -36,14 +36,14 @@
     {
         "id": "sqlite-db-config",
         "type": "sqlitedb",
-        "db": "/data/clientes.db",
+        "db": "/data/escola.db",
         "mode": "RWC"
     },
     {
         "id": "comment-overview",
         "type": "comment",
         "z": "tab-lyvia-chatbot",
-        "name": "Fluxo principal: Telegram recebe mensagem, Watson responde, usuario informa CPF e SQLite consulta cliente.",
+        "name": "Fluxo principal: Telegram recebe mensagem, Watson responde, usuario informa CPF e SQLite consulta aluno.",
         "info": "",
         "x": 470,
         "y": 40,
@@ -62,7 +62,7 @@
         "wires": [
             [
                 "route-conversation",
-                "c4dfd7fa7bd98feb"
+                "debug-telegram-in"
             ],
             []
         ]
@@ -72,7 +72,7 @@
         "type": "function",
         "z": "tab-lyvia-chatbot",
         "name": "Roteador conversa / CPF",
-        "func": "const payload = msg.payload || {};\nconst chatId = payload.chatId || payload.chatid || payload.message?.chat?.id;\nconst text = String(payload.content || payload.text || payload.message?.text || '').trim();\n\nif (!chatId) {\n    node.warn('Mensagem sem chatId recebida do Telegram.');\n    return [null, null];\n}\n\nconst stateKey = `awaitingCpf:${chatId}`;\n\nfunction reply(content) {\n    return {\n        payload: {\n            chatId,\n            type: 'message',\n            content\n        }\n    };\n}\n\nfunction onlyDigits(value) {\n    return String(value || '').replace(/\\D/g, '');\n}\n\nfunction isValidCpf(cpf) {\n    cpf = onlyDigits(cpf);\n    if (cpf.length !== 11 || /^(\\d)\\1{10}$/.test(cpf)) return false;\n\n    let sum = 0;\n    for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i);\n    let check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    if (check !== Number(cpf[9])) return false;\n\n    sum = 0;\n    for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i);\n    check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    return check === Number(cpf[10]);\n}\n\nfunction buildWatsonMessage() {\n    const apiKey = env.get('WATSON_API_KEY');\n    const assistantId = env.get('WATSON_ASSISTANT_ID');\n    const serviceUrl = String(env.get('WATSON_SERVICE_URL') || '').replace(/\\/$/, '');\n    const version = env.get('WATSON_VERSION') || '2024-08-25';\n\n    msg.chatId = chatId;\n    msg.userText = text || '/start';\n    msg.watsonConfigured = Boolean(apiKey && assistantId && serviceUrl);\n    msg.fallbackReply = 'Em que posso ajudar';\n\n    if (msg.watsonConfigured) {\n        msg.method = 'POST';\n        msg.url = `${serviceUrl}/v2/assistants/${assistantId}/message?version=${version}`;\n        msg.headers = {\n            'Content-Type': 'application/json',\n            'Accept': 'application/json',\n            'Authorization': `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`\n        };\n        msg.payload = {\n            input: {\n                message_type: 'text',\n                text: msg.userText\n            },\n            context: {\n                global: {\n                    system: {\n                        user_id: String(chatId)\n                    }\n                }\n            }\n        };\n    }\n\n    return msg;\n}\n\nif (!text || text === '/start') {\n    flow.set(stateKey, true);\n    return [null, buildWatsonMessage()];\n}\n\nif (flow.get(stateKey)) {\n    const cpf = onlyDigits(text);\n\n    if (cpf.length !== 11) {\n        return [null, reply('CPF invalido. Envie 11 digitos, com ou sem pontuacao.')];\n    }\n\n    if (!isValidCpf(cpf)) {\n        return [null, reply('CPF invalido. Confira os digitos e tente novamente.')];\n    }\n\n    msg.chatId = chatId;\n    msg.cpf = cpf;\n    msg.topic = `SELECT cpf, nome, status, plano, atualizado_em FROM clientes WHERE cpf = '${cpf}' LIMIT 1`;\n    flow.set(stateKey, false);\n    return [msg, null];\n}\n\nflow.set(stateKey, true);\nreturn [null, buildWatsonMessage()];",
+        "func": "const payload = msg.payload || {};\nconst chatId = payload.chatId || payload.chatid || payload.message?.chat?.id;\nconst text = String(payload.content || payload.text || payload.message?.text || '').trim();\n\nif (!chatId) {\n    node.warn('Mensagem sem chatId recebida do Telegram.');\n    return [null, null];\n}\n\nconst stateKey = `awaitingCpf:${chatId}`;\n\nfunction reply(content) {\n    return {\n        payload: {\n            chatId,\n            type: 'message',\n            content\n        }\n    };\n}\n\nfunction onlyDigits(value) {\n    return String(value || '').replace(/\\D/g, '');\n}\n\nfunction isValidCpf(cpf) {\n    cpf = onlyDigits(cpf);\n    if (cpf.length !== 11 || /^(\\d)\\1{10}$/.test(cpf)) return false;\n\n    let sum = 0;\n    for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i);\n    let check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    if (check !== Number(cpf[9])) return false;\n\n    sum = 0;\n    for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i);\n    check = 11 - (sum % 11);\n    if (check >= 10) check = 0;\n    return check === Number(cpf[10]);\n}\n\nfunction buildWatsonMessage() {\n    const apiKey = env.get('WATSON_API_KEY');\n    const assistantId = env.get('WATSON_ASSISTANT_ID');\n    const serviceUrl = String(env.get('WATSON_SERVICE_URL') || '').replace(/\\/$/, '');\n    const version = env.get('WATSON_VERSION') || '2024-08-25';\n\n    msg.chatId = chatId;\n    msg.userText = text || '/start';\n    msg.watsonConfigured = Boolean(apiKey && assistantId && serviceUrl);\n    msg.fallbackReply = 'Em que posso ajudar';\n\n    if (msg.watsonConfigured) {\n        msg.method = 'POST';\n        msg.url = `${serviceUrl}/v2/assistants/${assistantId}/message?version=${version}`;\n        msg.headers = {\n            'Content-Type': 'application/json',\n            'Accept': 'application/json',\n            'Authorization': `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`\n        };\n        msg.payload = {\n            input: {\n                message_type: 'text',\n                text: msg.userText\n            },\n            context: {\n                global: {\n                    system: {\n                        user_id: String(chatId)\n                    }\n                }\n            }\n        };\n    }\n\n    return msg;\n}\n\nif (!text || text === '/start') {\n    flow.set(stateKey, true);\n    return [null, buildWatsonMessage()];\n}\n\nif (flow.get(stateKey)) {\n    const cpf = onlyDigits(text);\n\n    if (cpf.length !== 11) {\n        return [null, reply('CPF invalido. Envie 11 digitos, com ou sem pontuacao.')];\n    }\n\n    if (!isValidCpf(cpf)) {\n        return [null, reply('CPF invalido. Confira os digitos e tente novamente.')];\n    }\n\n    msg.chatId = chatId;\n    msg.cpf = cpf;\n    msg.topic = `SELECT a.id AS aluno_id, a.cpf, a.nome AS aluno_nome, a.rm, c.nome AS curso_nome, m.nome AS materia_nome, m.turno, m.total_horas, n.cp_1, n.cp_2, n.gs_1, n.ch_1, n.media_final FROM aluno a JOIN curso c ON c.id = a.curso_id LEFT JOIN notas n ON n.aluno_id = a.id LEFT JOIN materia m ON m.id = n.materia_id WHERE a.cpf = '${cpf}' ORDER BY m.nome`;\n    flow.set(stateKey, false);\n    return [msg, null];\n}\n\nflow.set(stateKey, true);\nreturn [null, buildWatsonMessage()];",
         "outputs": 2,
         "timeout": 0,
         "noerr": 0,
@@ -83,10 +83,12 @@
         "y": 120,
         "wires": [
             [
-                "sqlite-clientes"
+                "sqlite-clientes",
+                "debug-route-sqlite"
             ],
             [
-                "switch-watson-config"
+                "switch-watson-config",
+                "debug-route-watson"
             ]
         ]
     },
@@ -102,7 +104,8 @@
         "y": 80,
         "wires": [
             [
-                "format-sqlite-response"
+                "format-sqlite-response",
+                "debug-sqlite-raw"
             ]
         ]
     },
@@ -111,7 +114,7 @@
         "type": "function",
         "z": "tab-lyvia-chatbot",
         "name": "Formatar resposta SQLite",
-        "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst cpf = String(msg.cpf || '').replace(/\\D/g, '');\nconst maskedCpf = cpf.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');\n\nlet content;\nif (rows.length === 0) {\n    content = `Nao encontrei cadastro para o CPF ${maskedCpf}.`;\n} else {\n    const cliente = rows[0];\n    content = [\n        `Cadastro encontrado para ${maskedCpf}:`,\n        `Nome: ${cliente.nome}`,\n        `Status: ${cliente.status}`,\n        `Plano: ${cliente.plano || 'nao informado'}`,\n        `Atualizado em: ${cliente.atualizado_em}`\n    ].join('\\n');\n}\n\nmsg.payload = {\n    chatId: msg.chatId,\n    type: 'message',\n    content\n};\nreturn msg;",
+        "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst cpf = String(msg.cpf || '').replace(/\\D/g, '');\nconst maskedCpf = cpf.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');\n\nlet content;\nif (rows.length === 0) {\n    content = `Nao encontrei aluno para o CPF ${maskedCpf}.`;\n} else {\n    const aluno = rows[0];\n    const lines = [\n        `Aluno encontrado para ${maskedCpf}:`,\n        `Nome: ${aluno.aluno_nome}`,\n        `RM: ${aluno.rm}`,\n        `Curso: ${aluno.curso_nome}`\n    ];\n\n    const materias = rows.filter(row => row.materia_nome);\n    if (materias.length > 0) {\n        lines.push('', 'Notas:');\n        for (const materia of materias) {\n            lines.push(`- ${materia.materia_nome} (${materia.turno}, ${materia.total_horas}h): media ${materia.media_final}`);\n        }\n    }\n\n    content = lines.join('\\n');\n}\n\nmsg.payload = {\n    chatId: msg.chatId,\n    type: 'message',\n    content\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -122,7 +125,9 @@
         "y": 80,
         "wires": [
             [
-                "telegram-out"
+                "telegram-out",
+                "debug-sqlite-formatted",
+                "debug-telegram-out"
             ]
         ]
     },
@@ -148,7 +153,8 @@
         "y": 160,
         "wires": [
             [
-                "watson-http"
+                "watson-http",
+                "debug-watson-request"
             ],
             [
                 "mock-watson-response"
@@ -175,7 +181,8 @@
         "y": 140,
         "wires": [
             [
-                "format-watson-response"
+                "format-watson-response",
+                "debug-watson-raw"
             ]
         ]
     },
@@ -195,7 +202,9 @@
         "y": 140,
         "wires": [
             [
-                "telegram-out"
+                "telegram-out",
+                "debug-watson-formatted",
+                "debug-telegram-out"
             ]
         ]
     },
@@ -215,7 +224,9 @@
         "y": 200,
         "wires": [
             [
-                "telegram-out"
+                "telegram-out",
+                "debug-local-watson",
+                "debug-telegram-out"
             ]
         ]
     },
@@ -234,10 +245,10 @@
         ]
     },
     {
-        "id": "c4dfd7fa7bd98feb",
+        "id": "debug-telegram-in",
         "type": "debug",
         "z": "tab-lyvia-chatbot",
-        "name": "debug 1",
+        "name": "DEBUG entrada Telegram",
         "active": true,
         "tosidebar": true,
         "console": false,
@@ -246,8 +257,161 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 300,
-        "y": 240,
+        "x": 310,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "debug-route-sqlite",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG rota CPF -> SQLite",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "debug-route-watson",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG rota -> Watson",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "debug-sqlite-raw",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG retorno SQLite bruto",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 860,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "debug-sqlite-formatted",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG resposta SQLite formatada",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1130,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "debug-watson-request",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG request Watson",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 860,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "debug-watson-raw",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG retorno Watson bruto",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1130,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "debug-watson-formatted",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG resposta Watson formatada",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1380,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "debug-local-watson",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG resposta local Watson",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1130,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "debug-telegram-out",
+        "type": "debug",
+        "z": "tab-lyvia-chatbot",
+        "name": "DEBUG saida Telegram",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1580,
+        "y": 300,
         "wires": []
     }
 ]
